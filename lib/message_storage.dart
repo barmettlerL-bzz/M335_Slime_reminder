@@ -7,12 +7,6 @@ class MessageStorage {
   static Future<List<String>> loadMessages() async {
     final prefs = await SharedPreferences.getInstance();
     final messages = prefs.getStringList(_key);
-    
-    final currentMessage = prefs.getString('slime_current_message');
-    if (currentMessage != null && !messages!.contains(currentMessage)) {
-      messages.add(currentMessage);
-      await prefs.setStringList(_key, messages);
-    }
 
     return messages ?? [
       "You're doing great!",
@@ -65,4 +59,10 @@ class MessageStorage {
     }
     return prefs.getString('slime_current_message') ?? "Hi there! Add messages in settings!";
   }
+
+  static Future<String> getCurrentMessage() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('slime_current_message') ?? updateMessage();
+  }
+
 }
