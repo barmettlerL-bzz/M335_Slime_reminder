@@ -1,10 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'message_storage.dart';
+import 'settings_page.dart';
 import 'slime.dart';
+import 'notification_service.dart';
+import 'package:timezone/data/latest_all.dart' as tz;
+import 'package:timezone/timezone.dart' as tz;
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  tz.initializeTimeZones();
+  tz.setLocalLocation(tz.local); // or use tz.local
+
+  final nf = NotificationService();
+  await nf.initialize();
+  await nf.requestExactAlarmPermission();
+  nf.scheduleAllReminders();
 
   runApp(const MyApp());
 }
@@ -28,7 +39,7 @@ class MyApp extends StatelessWidget {
       initialRoute: '/',
       routes: {
         '/': (context) => const HomePage(),
-        '/settings': (context) => const Placeholder(), // Replace later
+        '/settings': (context) => const SettingsPage(),
       },
     );
   }
@@ -42,7 +53,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  String currentMessage = "Loading...";
+String currentMessage = "Loading...";
 
   @override
   void initState() {
@@ -50,83 +61,113 @@ class _HomePageState extends State<HomePage> {
     _loadMessageCycle();
   }
 
-  Future<void> _loadMessageCycle() async {
-    final prefs = await SharedPreferences.getInstance();
-    final now = DateTime.now();
-    final hour = now.hour;
-    final minute = now.minute;
+  TimeOfDay _parseTimeOfDay(String? timeString) {
+  if (timeString == null) return TimeOfDay(hour: 0, minute: 0);
+  final parts = timeString.split(':');
+  if (parts.length != 2) return TimeOfDay(hour: 0, minute: 0);
+  final hour = int.tryParse(parts[0]) ?? 0;
+  final minute = int.tryParse(parts[1]) ?? 0;
+  return TimeOfDay(hour: hour, minute: minute);
+}
 
-    final morningEnabled = prefs.getBool('reminder_morning') ?? true;
-    final afternoonEnabled = prefs.getBool('reminder_afternoon') ?? true;
-    final eveningEnabled = prefs.getBool('reminder_evening') ?? true;
+Future<void> _loadMessageCycle() async {
+  final prefs = await SharedPreferences.getInstance();
+  final now = DateTime.now();
+  final hour = now.hour;
+  final minute = now.minute;
 
-    final morningHour = prefs.getInt('morning_hour') ?? 8;
-    final morningMinute = prefs.getInt('morning_minute') ?? 0;
-    final afternoonHour = prefs.getInt('afternoon_hour') ?? 13;
-    final afternoonMinute = prefs.getInt('afternoon_minute') ?? 0;
-    final eveningHour = prefs.getInt('evening_hour') ?? 20;
-    final eveningMinute = prefs.getInt('evening_minute') ?? 0;
+  final morningEnabled = prefs.getBool('reminder_morning') ?? true;
+  final afternoonEnabled = prefs.getBool('reminder_afternoon') ?? true;
+  final eveningEnabled = prefs.getBool('reminder_evening') ?? true;
 
-    bool shouldUpdate =
-        (hour == morningHour && minute == morningMinute && morningEnabled) ||
-            (hour == afternoonHour &&
-                minute == afternoonMinute &&
-                afternoonEnabled) ||
-            (hour == eveningHour &&
-                minute == eveningMinute &&
-                eveningEnabled);
+  final morningTime = _parseTimeOfDay(prefs.getString('morning_time')) ?? TimeOfDay(hour: 8, minute: 0);
+  final afternoonTime = _parseTimeOfDay(prefs.getString('afternoon_time')) ?? TimeOfDay(hour: 13, minute: 0);
+  final eveningTime = _parseTimeOfDay(prefs.getString('evening_time')) ?? TimeOfDay(hour: 18, minute: 0);
 
-    final message = shouldUpdate
-        ? await MessageStorage.updateMessage()
-        : await MessageStorage.getCurrentMessage();
+  bool shouldUpdate =
+      (morningTime.hour == hour && morningTime.minute == minute && morningEnabled) ||
+      (afternoonTime.hour == hour && afternoonTime.minute == minute && afternoonEnabled) ||
+      (eveningTime.hour == hour && eveningTime.minute == minute && eveningEnabled);
 
-    setState(() {
-      currentMessage = message;
-    });
+  String message = shouldUpdate
+      ? await MessageStorage.updateMessage()
+      : await MessageStorage.getCurrentMessage();
+
+  if (message == "Loading...") {
+    message = await MessageStorage.updateMessage();
   }
+
+  setState(() {
+    currentMessage = message;
+  });
+}
+
 
   void _goToSettings() {
     Navigator.pushNamed(context, '/settings');
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFEAF6FF),
-      appBar: AppBar(
-        title: const Text("Slime Reminder"),
-        centerTitle: true,
-        backgroundColor: const Color(0xFF93CFF0),
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Slime(scale: 180), // 👈 Use scale here
-            const SizedBox(height: 30),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: Text(
-                currentMessage,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.black87,
+Widget build(BuildContext context) {
+  return Scaffold(
+    backgroundColor: const Color(0xFFEAF6FF),
+    appBar: AppBar(
+      title: const Text("Slime Reminder"),
+      centerTitle: true,
+      backgroundColor: const Color(0xFF93CFF0),
+    ),
+    body: Column(
+      children: [
+        Padding(
+          padding: EdgeInsets.only(top: MediaQuery.of(context).size.height * 0.2),
+          child: Column(
+            children: [
+              const Slime(scale: 180),
+              const SizedBox(height: 30),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                child: Text(
+                  currentMessage,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.black87,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 40),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF84BDFF),
-              ),
-              onPressed: _goToSettings,
-              child: const Text("Go to Settings"),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
-    );
+
+        // Take remaining space here but don't push button too far down
+        Expanded(child: Container()),
+
+        // Button with some bottom padding (e.g. 5% of screen height)
+        Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).size.height * 0.08,
+            left: 16,
+            right: 16,
+          ),
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF84BDFF),
+              minimumSize: const Size.fromHeight(50), // optional: bigger button
+            ),
+            onPressed: _goToSettings,
+            child: const Text(
+              "Go to Settings",
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w400,
+                color: Colors.black,
+              ),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
   }
 }
