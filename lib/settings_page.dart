@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'slime.dart';
 import 'notification_service.dart';
+import 'message_manage_page.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -123,11 +124,13 @@ class _SettingsPageState extends State<SettingsPage> {
 }
 
 
+  
   void _onAddCustomReminder() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Custom reminder functionality coming soon!")),
+  Navigator.of(context).push(
+    MaterialPageRoute(builder: (context) => ManageMessagePage()),
     );
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -202,10 +205,15 @@ class _SettingsPageState extends State<SettingsPage> {
             child: ElevatedButton.icon(
               onPressed: _onAddCustomReminder,
               icon: const Icon(Icons.add),
-              label: const Text("Add Custom Reminder"),
+              label: const Text("Add Custom Reminder",
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.black,
+                ),
+              ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF84BDFF),
-                minimumSize: const Size.fromHeight(50),
+              backgroundColor: const Color(0xFF93CFF0),
+              minimumSize: const Size.fromHeight(50),
               ),
             ),
           ),
