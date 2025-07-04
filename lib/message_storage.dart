@@ -62,7 +62,13 @@ class MessageStorage {
 
   static Future<String> getCurrentMessage() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('slime_current_message') ?? updateMessage();
+    final current = prefs.getString('slime_current_message');
+    if (current == null || current.trim().isEmpty) {
+      return await updateMessage();
+    }
+    return current;
   }
+
+
 
 }

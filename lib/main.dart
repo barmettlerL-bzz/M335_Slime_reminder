@@ -66,50 +66,35 @@ String currentMessage = "Loading...";
   }
 
   TimeOfDay _parseTimeOfDay(String? timeString) {
-  if (timeString == null) return TimeOfDay(hour: 0, minute: 0);
-  final parts = timeString.split(':');
-  if (parts.length != 2) return TimeOfDay(hour: 0, minute: 0);
-  final hour = int.tryParse(parts[0]) ?? 0;
-  final minute = int.tryParse(parts[1]) ?? 0;
-  return TimeOfDay(hour: hour, minute: minute);
-}
-
-Future<void> _loadMessageCycle() async {
-  final prefs = await SharedPreferences.getInstance();
-  final now = DateTime.now();
-  final hour = now.hour;
-  final minute = now.minute;
-
-  final morningEnabled = prefs.getBool('reminder_morning') ?? true;
-  final afternoonEnabled = prefs.getBool('reminder_afternoon') ?? true;
-  final eveningEnabled = prefs.getBool('reminder_evening') ?? true;
-
-  final morningTime = _parseTimeOfDay(prefs.getString('morning_time')) ?? TimeOfDay(hour: 8, minute: 0);
-  final afternoonTime = _parseTimeOfDay(prefs.getString('afternoon_time')) ?? TimeOfDay(hour: 13, minute: 0);
-  final eveningTime = _parseTimeOfDay(prefs.getString('evening_time')) ?? TimeOfDay(hour: 18, minute: 0);
-
-  bool shouldUpdate =
-      (morningTime.hour == hour && morningTime.minute == minute && morningEnabled) ||
-      (afternoonTime.hour == hour && afternoonTime.minute == minute && afternoonEnabled) ||
-      (eveningTime.hour == hour && eveningTime.minute == minute && eveningEnabled);
-
-  String message = shouldUpdate
-      ? await MessageStorage.updateMessage()
-      : await MessageStorage.getCurrentMessage();
-
-  if (message == "Loading...") {
-    message = await MessageStorage.updateMessage();
+    if (timeString == null) return TimeOfDay(hour: 0, minute: 0);
+    final parts = timeString.split(':');
+    if (parts.length != 2) return TimeOfDay(hour: 0, minute: 0);
+    final hour = int.tryParse(parts[0]) ?? 0;
+    final minute = int.tryParse(parts[1]) ?? 0;
+    return TimeOfDay(hour: hour, minute: minute);
   }
 
-  setState(() {
-    currentMessage = message;
-  });
-}
+  Future<void> _loadMessageCycle() async {
+    String message = await MessageStorage.getCurrentMessage();
 
+    if (message == "Loading..." ||
+        message == "Hi there! Add messages in settings!" ||
+        message.trim().isEmpty) {
+      message = await MessageStorage.updateMessage();
+    }
 
-  void _goToSettings() {
-    Navigator.pushNamed(context, '/settings');
+    setState(() {
+      currentMessage = message;
+    });
   }
+
+
+
+  void _goToSettings() async {
+    await Navigator.pushNamed(context, '/settings');
+    _loadMessageCycle(); // Reload after returning
+  }
+
 
   @override
 Widget build(BuildContext context) {

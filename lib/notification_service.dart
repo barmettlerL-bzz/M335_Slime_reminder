@@ -2,8 +2,43 @@ import "package:flutter/material.dart";
 import "package:flutter_local_notifications/flutter_local_notifications.dart";
 import 'package:shared_preferences/shared_preferences.dart';
 import "package:slime_reminder/message_storage.dart";
+import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'package:timezone/timezone.dart' as tz;
-import "package:timezone/timezone.dart";
+import 'package:timezone/data/latest.dart' as tz;
+
+@pragma('vm:entry-point')
+void alarmCallback() async {
+  final plugin = FlutterLocalNotificationsPlugin();
+
+  const initSettings = InitializationSettings(
+    android: AndroidInitializationSettings('idle000'),
+    iOS: DarwinInitializationSettings(),
+  );
+
+  await plugin.initialize(initSettings);
+
+  tz.initializeTimeZones();
+  
+  final message = await MessageStorage.updateMessage();
+  await MessageStorage.saveMessages(await MessageStorage.loadMessages()); // Optional if list was modified
+
+  const androidDetails = AndroidNotificationDetails(
+    'slime_channel_2',
+    'Slime Messages',
+    channelDescription: 'Slime reminder messages',
+    importance: Importance.max,
+    priority: Priority.high,
+  );
+
+  await plugin.show(
+    DateTime.now().millisecondsSinceEpoch ~/ 1000,
+    'Slime Reminder',
+    message,
+    NotificationDetails(android: androidDetails),
+  );
+
+  print("🔔 Alarm triggered. Message sent: $message");
+}
 
 
 class NotificationService {
@@ -24,6 +59,27 @@ class NotificationService {
 
     await _notificationsPlugin.initialize(initializationSettings);
   }
+
+  void _scheduleAlarm(int id, TimeOfDay time) {
+  final now = DateTime.now();
+  var scheduled = DateTime(now.year, now.month, now.day, time.hour, time.minute);
+
+  if (scheduled.isBefore(now)) {
+    scheduled = scheduled.add(const Duration(days: 1));
+  }
+
+  AndroidAlarmManager.periodic(
+    const Duration(seconds: 30),
+    id,
+    alarmCallback,
+    startAt: scheduled,
+    exact: true,
+    wakeup: true,
+    rescheduleOnReboot: true,
+  );
+}
+
+
 
   Future<void> requestExactAlarmPermission() async {
   final androidPlugin = FlutterLocalNotificationsPlugin()
@@ -99,86 +155,46 @@ class NotificationService {
 
   Future<void> showNotificationNow() async {
     
-    final message = await _notificationsPlugin.pendingNotificationRequests();
-    /* await _getCurrentMessageForNotification();
+    final message = await _getCurrentMessageForNotification();
+    
+    //await _notificationsPlugin.pendingNotificationRequests();
 
     await _notificationsPlugin.show(
       0,
       'Slime Reminder',
       message,
       notificationDetails(),
-    );*/
+    );
 
     print(message);
   }
 
-  Future<void> scheduleNotification(int id, DateTime scheduledTime) async {
-  final message = await _getCurrentMessageForNotification();
+  Future<void> scheduleAllReminders() async {
+  final prefs = await SharedPreferences.getInstance();
 
-  // Ensure seconds = 0 for precise scheduling
-  final scheduledTimeWithSeconds = DateTime(
-    scheduledTime.year,
-    scheduledTime.month,
-    scheduledTime.day,
-    scheduledTime.hour,
-    scheduledTime.minute,
-    1, 
-  );
-  final tzScheduledDate = tz.TZDateTime.from(scheduledTimeWithSeconds, tz.local);
+  final morningEnabled = prefs.getBool('reminder_morning') ?? true;
+  final afternoonEnabled = prefs.getBool('reminder_afternoon') ?? true;
+  final eveningEnabled = prefs.getBool('reminder_evening') ?? true;
 
-  await _notificationsPlugin.zonedSchedule(
-    id,
-    'Slime Reminder',
-    message,
-    tzScheduledDate,
-    notificationDetails(),
-    androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-    matchDateTimeComponents: DateTimeComponents.time, // daily repeat
-  );
+  final morningTime = _parseTimeOfDay(prefs.getString('morning_time')) ?? TimeOfDay(hour: 8, minute: 0);
+  final afternoonTime = _parseTimeOfDay(prefs.getString('afternoon_time')) ?? TimeOfDay(hour: 13, minute: 0);
+  final eveningTime = _parseTimeOfDay(prefs.getString('evening_time')) ?? TimeOfDay(hour: 18, minute: 0);
+
+  await AndroidAlarmManager.cancel(1);
+  await AndroidAlarmManager.cancel(2);
+  await AndroidAlarmManager.cancel(3);
+
+  if (morningEnabled) {
+    _scheduleAlarm(1, morningTime);
+  }
+
+  if (afternoonEnabled) {
+    _scheduleAlarm(2, afternoonTime);
+  }
+
+  if (eveningEnabled) {
+    _scheduleAlarm(3, eveningTime);
+  }
 }
 
-
-
-  Future<void> cancelNotification(int id) async {
-    await _notificationsPlugin.cancel(id);
-  }
-
-  Future<void> scheduleAllReminders() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    final morningEnabled = prefs.getBool('reminder_morning') ?? true;
-    final afternoonEnabled = prefs.getBool('reminder_afternoon') ?? true;
-    final eveningEnabled = prefs.getBool('reminder_evening') ?? true;
-
-    final morningTime = _parseTimeOfDay(prefs.getString('morning_time')) ?? TimeOfDay(hour: 8, minute: 0);
-    final afternoonTime = _parseTimeOfDay(prefs.getString('afternoon_time')) ?? TimeOfDay(hour: 13, minute: 0);
-    final eveningTime = _parseTimeOfDay(prefs.getString('evening_time')) ?? TimeOfDay(hour: 18, minute: 0);
-
-    final now = DateTime.now();
-
-    DateTime toDateTime(TimeOfDay t) {
-      final scheduled = DateTime(now.year, now.month, now.day, t.hour, t.minute, 0);
-      return scheduled;
-    }
-
-
-    // Id's 1, 2, 3 = morning, afternoon, evening
-    if (morningEnabled) {
-      await scheduleNotification(1, toDateTime(morningTime));
-    } else {
-      await cancelNotification(1);
-    }
-
-    if (afternoonEnabled) {
-      await scheduleNotification(2, toDateTime(afternoonTime));
-    } else {
-      await cancelNotification(2);
-    }
-
-    if (eveningEnabled) {
-      await scheduleNotification(3, toDateTime(eveningTime));
-    } else {
-      await cancelNotification(3);
-    }
-  }
 }
