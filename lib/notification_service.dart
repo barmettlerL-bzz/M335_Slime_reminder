@@ -3,6 +3,7 @@ import "package:flutter_local_notifications/flutter_local_notifications.dart";
 import 'package:shared_preferences/shared_preferences.dart';
 import "package:slime_reminder/message_storage.dart";
 import 'package:timezone/timezone.dart' as tz;
+import "package:timezone/timezone.dart";
 
 
 class NotificationService {
@@ -28,6 +29,7 @@ class NotificationService {
   final androidPlugin = FlutterLocalNotificationsPlugin()
       .resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>();
+
 
   if (androidPlugin != null) {
     final isPermitted = await androidPlugin.canScheduleExactNotifications();
@@ -96,45 +98,45 @@ class NotificationService {
   }
 
   Future<void> showNotificationNow() async {
-    final message = await _getCurrentMessageForNotification();
+    
+    final message = await _notificationsPlugin.pendingNotificationRequests();
+    /* await _getCurrentMessageForNotification();
 
     await _notificationsPlugin.show(
       0,
       'Slime Reminder',
       message,
       notificationDetails(),
-    );
+    );*/
+
+    print(message);
   }
 
   Future<void> scheduleNotification(int id, DateTime scheduledTime) async {
-  // Force update the message just before scheduling, so we can test if this is triggered
+  final message = await _getCurrentMessageForNotification();
 
-  String message = await MessageStorage.updateMessage(); //shouldn't be here!! testing only
-  String currentMessage = await MessageStorage.getCurrentMessage();
-
-  final now = DateTime.now();
-
+  // Ensure seconds = 0 for precise scheduling
   final scheduledTimeWithSeconds = DateTime(
-    now.year,
-    now.month,
-    now.day,
+    scheduledTime.year,
+    scheduledTime.month,
+    scheduledTime.day,
     scheduledTime.hour,
     scheduledTime.minute,
-    0,
+    1, 
   );
-
-  final scheduledDate = tz.TZDateTime.from(scheduledTimeWithSeconds, tz.local);
+  final tzScheduledDate = tz.TZDateTime.from(scheduledTimeWithSeconds, tz.local);
 
   await _notificationsPlugin.zonedSchedule(
     id,
     'Slime Reminder',
     message,
-    scheduledDate,
+    tzScheduledDate,
     notificationDetails(),
     androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-    matchDateTimeComponents: DateTimeComponents.time, // daily
+    matchDateTimeComponents: DateTimeComponents.time, // daily repeat
   );
 }
+
 
 
   Future<void> cancelNotification(int id) async {
@@ -155,8 +157,8 @@ class NotificationService {
     final now = DateTime.now();
 
     DateTime toDateTime(TimeOfDay t) {
-      final scheduled = DateTime(now.year, now.month, now.day, t.hour, t.minute);
-      return scheduled.isBefore(now) ? scheduled.add(const Duration(days: 1)) : scheduled;
+      final scheduled = DateTime(now.year, now.month, now.day, t.hour, t.minute, 0);
+      return scheduled;
     }
 
 
