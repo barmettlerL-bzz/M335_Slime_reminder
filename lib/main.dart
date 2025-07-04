@@ -6,11 +6,15 @@ import 'slime.dart';
 import 'notification_service.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
+import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 
 void main() async {
+
   WidgetsFlutterBinding.ensureInitialized();
+
+  await AndroidAlarmManager.initialize();
   tz.initializeTimeZones();
-  tz.setLocalLocation(tz.local); // or use tz.local
+  tz.setLocalLocation(tz.local);
 
   final nf = NotificationService();
   await nf.initialize();
@@ -140,10 +144,8 @@ Widget build(BuildContext context) {
           ),
         ),
 
-        // Take remaining space here but don't push button too far down
         Expanded(child: Container()),
 
-        // Button with some bottom padding (e.g. 5% of screen height)
         Padding(
           padding: EdgeInsets.only(
             bottom: MediaQuery.of(context).size.height * 0.08,
@@ -153,7 +155,7 @@ Widget build(BuildContext context) {
           child: ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF84BDFF),
-              minimumSize: const Size.fromHeight(50), // optional: bigger button
+              minimumSize: const Size.fromHeight(50),
             ),
             onPressed: _goToSettings,
             child: const Text(
